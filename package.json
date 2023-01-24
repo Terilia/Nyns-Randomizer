@@ -1,9 +1,9 @@
 {
-    "name": "AfterDBLoadHook",
-    "version": "1.0.0",
+    "name": "Nyns Randomizer",
+    "version": "0.0.1",
     "main": "src/mod.js",
-    "license": "MIT",
-    "author": "Chomp",
+    "license": "CC BY-NC",
+    "author": "Nyinah",
     "akiVersion": "3.4.1",
     "scripts": {
         "setup": "npm i",
