@@ -1,161 +1,318 @@
 import { DependencyContainer, inject, injectable } from "tsyringe";
-import { IPreAkiLoadMod } from "@spt-aki/models/external/IPreAkiLoadMod";
-import { IPostAkiLoadMod } from "@spt-aki/models/external/IPostAkiLoadMod";
-import { IPostDBLoadMod } from "@spt-aki/models/external/IPostDBLoadMod";
+import { IPostDBLoadMod } from "@spt-aki/models/external";
 import { DatabaseServer } from "@spt-aki/servers/DatabaseServer";
-import { ItemHelper } from "@spt-aki/helpers/ItemHelper";
-import { BaseClasses } from "@spt-aki/models/enums/BaseClasses";
+declare const process: any; // Declare process globally with any type
+
+import * as fs from 'fs';
+import * as path from 'path';
 
 @injectable()
-class Mod implements IPreAkiLoadMod, IPostAkiLoadMod, IPostDBLoadMod {
-  public postDBLoad(c: DependencyContainer) {
-    //START CONFIG 
-    const sillymode = false;
-    const textsilly = false;
-    const everythingwitheveryting = false;
-    //END CONFIG
+class Mod implements IPostDBLoadMod {
+    /////CONFIG PART
+    private static readonly RNG_SEED: number = 69420; //CHANGE THIS NUMBER for a different random seed :) You can even share them with friends!
+    private static readonly RNG_A: number = 1664525; //Keep this number 1664525
+    private static readonly RNG_C: number = 1013904223; //Keep this number 1013904223
+    private static readonly RNG_M: number = Math.pow(2, 32);
+    private static readonly NIGHT_VISION_SAVE_KEY: string = "570fd79bd2720bc7458b4583";
+    private static readonly FOLDER_RELATIVE_PATH: string = 'AppData\\Local\\Temp\\Battlestate Games\\EscapeFromTarkov'; //This is to remove the cached pictures for each restart, so you see the weapons correctly in the preview.
+    public postDBLoad(c: DependencyContainer): void {
+        const MAX_ATTEMPTS: number = 5000;
+        const PROCESS_COUNT_INTERVAL: number = 100;
+        const EXCLUDED_ID: string = "5a2c3a9486f774688b05e574";
+        const CARTRIDGE_MULTIPLIER_MAX: number = 30; //Maximum multiplier for magazines. 
+        const VALUE_RANGE_MIN: number = 0.04;
+        const DIFFERENT_FOLDERS_ALLOW: number = 1; //Decides how many folders can be different for the models. Higher number -> crazier results. 
+        const ALLOW_MOD_RANDOMIZATION = false; //Enabling this allows a very, VERY strong randomization. 
+        const ALLOW_EVERYTHING_WITH_EVERYTHING = false; //Very buggy, bots won't spawn. But its fun. 
+        const fieldConfigurations = {
+            'Ergonomics': { isFloat: false, canBeNegative: true, maxMultiplier: 5 },
+            'ExamineExperience': { isFloat: false, canBeNegative: false, maxMultiplier: 25 },
+            'ExamineTime': { isFloat: false, canBeNegative: false, maxMultiplier: 5 },
+            'LootExperience': { isFloat: false, canBeNegative: false, maxMultiplier: 25 },
+            'MaxDurability': { isFloat: false, canBeNegative: false, maxMultiplier: 25 },
+            'RecoilAngle': { isFloat: false, canBeNegative: false, maxMultiplier: 3 },
+            'StackMaxSize': { isFloat: false, canBeNegative: false, maxMultiplier: 25 },
+            'Weight': { isFloat: true, canBeNegative: false, maxMultiplier: 1 },
+            'bFirerate': { isFloat: false, canBeNegative: false, maxMultiplier: 10 },
+            'ArmorDamage': { isFloat: false, canBeNegative: false, maxMultiplier: 25 },
+            'BulletMassGram': { isFloat: true, canBeNegative: false, maxMultiplier: 25 },
+            'ExplosionStrength': { isFloat: false, canBeNegative: false, maxMultiplier: 4 },
+            'FragmentsCount': { isFloat: false, canBeNegative: false, maxMultiplier: 25 },
+            'HeavyBleedingDelta': { isFloat: false, canBeNegative: false, maxMultiplier: 25 },
+            'InitialSpeed': { isFloat: false, canBeNegative: false, maxMultiplier: 3 },
+            'MaxExplosionDistance': { isFloat: false, canBeNegative: false, maxMultiplier: 25 },
+            'MaxFragmentsCount': { isFloat: false, canBeNegative: false, maxMultiplier: 25 },
+            'PenetrationPower': { isFloat: false, canBeNegative: false, maxMultiplier: 25 },
+            'ProjectileCount': { isFloat: false, canBeNegative: false, maxMultiplier: 5, minValue: 1 },
+            'buckshotBullets': { isFloat: false, canBeNegative: false, maxMultiplier: 25 },
+            'MaxHpResource': { isFloat: false, canBeNegative: false, maxMultiplier: 25 },
+            'Height': { isFloat: false, canBeNegative: false, maxMultiplier: 2, minValue: 1, maxValue: 3 },
+            'Width': { isFloat: false, canBeNegative: false, maxMultiplier: 2, minValue: 1, maxValue: 3 },
+            'medUseTime': { isFloat: false, canBeNegative: false, maxMultiplier: 3 },
+            'CameraRecoil': { isFloat: true, canBeNegative: false, maxMultiplier: 2 }
+        };
 
-    const itemhelper = c.resolve<ItemHelper>("ItemHelper");
-    const db = c.resolve<DatabaseServer>("DatabaseServer").getTables().templates.items;
-    const f = ["Name", "LootExperience", "ExamineExperience", "Durability", "Accuracy", "Recoil", "Loudness", "EffectiveDistance", "Ergonomics", "Velocity", "DoubleActionAccuracyPenaltyMult", "HeatFactor", "CoolFactor", "SingleFireRate", "bFirerate", "RecoilForceUp", "RecoilForceBack", "RecoilAngle", "shotgunDispersion", "ammoAccr", "Tracer", "TracerColor", "TracerDistance", "Damage", "ProjectileCount", "RicochetChance", "MinFragmentsCount", "MaxFragmentsCount", "ShowBullet", "BallisticCoeficient", "SpeedRetardation", "InitialSpeed", "TrajectoryDeviationChance", "TrajectoryDeviation", "AmmoLifeTimeSec", "Prefab", "ItemSound"];
-    const r = {};
-    const a = [];
-    let allids = c.resolve<DatabaseServer>("DatabaseServer").getTables().allids
-    allids = [];
-    let mmodid = c.resolve<DatabaseServer>("DatabaseServer").getTables().mmodid
-    mmodid = []
-    for (const i in db) {
-      const b = db[i];
-      if (!r[b._parent]) r[b._parent] = [];
-      r[b._parent].push(b);
-      if (b._type == "Item" && b._parent && b._props) {
-        a.push(b);
-        allids.push(b._id);
-      }
+        ////CONFIG END
 
-    }
 
-    function s(arr) {
-      for (let i = arr.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [arr[i], arr[j]] = [arr[j], arr[i]];
-      }
-    }
+        const db = c.resolve<DatabaseServer>("DatabaseServer").getTables().templates.items;
 
-    class ProgressBar {
-      public total: number;
-      public current: number;
-      public barLength: number;
-      public barChar: string;
-      public emptyChar: string;
+        class SeededRNG {
+            private seed: number;
 
-      constructor(total: number, barLength: number = 10, barChar: string = '☠', emptyChar: string = 'ඞ') {
-        this.total = total;
-        this.current = 0;
-        this.barLength = barLength;
-        this.barChar = barChar;
-        this.emptyChar = emptyChar;
-      }
-
-      public render() {
-        const percent = (this.current / this.total) * 100;
-        const filled = Math.floor((this.barLength * this.current) / this.total);
-        const empty = this.barLength - filled;
-        const filledBar = this.barChar.repeat(filled);
-        const emptyBar = this.emptyChar.repeat(empty);
-        console.clear()
-        console.log(`\r[${filledBar}${emptyBar}] ${percent.toFixed(2)}% - Loading Randomizer - Oh god help us`);
-      }
-
-      public update(value: number) {
-        this.current = value;
-        this.render();
-      }
-
-      public complete() {
-        this.current = this.total;
-        this.render();
-        console.log();
-      }
-    }
-    const progressBar = new ProgressBar(100);
-    const locales = Object.values(c.resolve<DatabaseServer>("DatabaseServer").getTables().locales.global) as Record<string, string>[];
-    let counter = 0;
-    if (textsilly) {
-      for (const test in locales) {
-        if (test == 2) { // 2 = english, this takes a long time. 
-          for (const test2 in locales[test]) {
-            counter++
-            const temp = JSON.parse(JSON.stringify(locales[test][test2]))
-            let reference = Object.keys(locales[test]).length * Math.random() << 0
-            locales[test][test2] = locales[test][Object.keys(locales[test])[reference]]
-            locales[test][Object.keys(locales[test])[reference]] = temp
-            if (Math.random() > 0.97) { console.clear() console.log(counter + " / " + Object.keys(locales[test]).length + " Changing Textfields! OH WOW!") }
-          }
-        }
-      }
-    }
-    for (const id in db) {
-
-      if (itemhelper.isOfBaseclasses(id, [BaseClasses.MOD, BaseClasses.FUNCTIONAL_MOD, BaseClasses.STOCK, BaseClasses.FOREGRIP, BaseClasses.MASTER_MOD, BaseClasses.MOUNT, BaseClasses.MUZZLE, BaseClasses.SIGHTS, BaseClasses.LIGHT_LASER_DESIGNATOR, BaseClasses.FLASH_HIDER, BaseClasses.IRON_SIGHT, BaseClasses.COLLIMATOR, BaseClasses.COMPACT_COLLIMATOR, BaseClasses.COMPENSATOR, BaseClasses.OPTIC_SCOPE, BaseClasses.SPECIAL_SCOPE, BaseClasses.SILENCER]) && !itemhelper.isOfBaseclasses(id, [BaseClasses.MAGAZINE, BaseClasses.CYLINDER_MAGAZINE, BaseClasses.AMMO])) {
-        mmodid.push(db[id]._id)
-        db[id]._props.RaidModdable = true;
-        db[id]._props.ToolModdable = false;
-      }
-    }
-
-    if (everythingwitheveryting) {
-      for (const id in db) {
-        if (itemhelper.isOfBaseclasses(id, [BaseClasses.WEAPON, BaseClasses.MOUNT, BaseClasses.SIGHTS])) {
-          for (const slots in db[id]._props.Slots) {
-            if (db[id]._props.Slots[slots]._name != "mod_magazine") db[id]._props.Slots[slots]._props.filters[0].Filter = mmodid.concat(db[id]._props.Slots[slots]._props.filters[0].Filter);
-          }
-        }
-      }
-    }
-
-    for (const id in db) {
-      if (Math.random() > 0.9) progressBar.update((Object.keys(db).indexOf(id) / Object.keys(db).length) * 100)
-      for (const id2 in db[id]) {
-        for (const id3 in db[id][id2]) {
-          for (let i = 0; i < a.length; i++) {
-            if (
-              id2 == "_props" && f.indexOf(id3) >= 0 && db[id] && db[id][id2] && db[id][id2][id3] &&
-              a[i] && a[i][id2] && a[i][id2][id3] &&
-              Object.getOwnPropertyDescriptor(db[id][id2], id3).writable && Object.getOwnPropertyDescriptor(a[i][id2], id3).writable
-            ) {
-
-              if (id3 == "Prefab") {
-                if (id3 == "Prefab" && db[id]._parent == a[i]._parent && a[i][id2][id3].path && a[i][id2][id3].path != "" && db[id][id2][id3].path && db[id][id2][id3].path != "") {
-                  const cache = JSON.parse(JSON.stringify(db[id][id2][id3]))
-                  db[id][id2][id3] = JSON.parse(JSON.stringify(a[i][id2][id3]))
-                  a[i][id2][id3] = JSON.parse(JSON.stringify(cache))
-                  s(a);
-                  break;
-                } else {
-
-                }
-              } else {
-                if (sillymode) {
-                  if (Number.isInteger(db[id][id2][id3])) {
-                    db[id][id2][id3] = Math.floor(db[id][id2][id3] * Math.random() * (Math.random() * 10))
-                  } else {
-                    if (typeof db[id][id2][id3] == "number") db[id][id2][id3] = 2 * Math.random() * db[id][id2][id3];
-                  }
-                }
-                const cache = JSON.parse(JSON.stringify(db[id][id2][id3]))
-                db[id][id2][id3] = JSON.parse(JSON.stringify(a[i][id2][id3]))
-                a[i][id2][id3] = JSON.parse(JSON.stringify(cache))
-                s(a);
-
-                break;
-              }
+            constructor(seed: number = Mod.RNG_SEED) {
+                this.seed = seed;
             }
-          }
+
+            random() {
+                this.seed = (Mod.RNG_A * this.seed + Mod.RNG_C) % Mod.RNG_M;
+                return this.seed / Mod.RNG_M;
+            }
         }
-      }
+        const rng = new SeededRNG();
+
+
+        function exchangePrefabPath(db: any) {
+            const keys = Object.keys(db);
+            let processedCount = 0;
+            const nightvisionsave = JSON.stringify(db[Mod.NIGHT_VISION_SAVE_KEY]);
+            keys.forEach(key => {
+                const item = db[key];
+                if (item._type !== "Item" || !item._props || !item._props.Prefab || !item._props.Prefab.path || item._props.Prefab.path.includes("recievers") || item._props.Prefab.path.includes("weapons")) {
+                    return; // Skip non-valid entries
+                }
+                const originalParent = db[key]._parent;
+                const originalPath = db[key]._props.Prefab.path;
+                const hasModBarrel = hasSlot(db[key], "mod_barrel");
+                const isMod = originalPath.includes("/mods/");
+                let newPath = "";
+                let attempts = 0;
+
+                do {
+                    const randomKey = keys[Math.floor(rng.random() * keys.length)];
+                    const randomItem = db[randomKey];
+                    if (randomItem && randomItem._parent === originalParent &&
+            randomItem._props && randomItem._props.Prefab && randomItem._props.Prefab.path //&&
+                    // hasModBarrel === hasSlot(randomItem, "mod_barrel")
+                    // &&
+                    // hasSlot(db[key], "mod_nvg") === hasSlot(randomItem, "mod_nvg")
+                    ) {
+                        newPath = randomItem._props.Prefab.path;
+                        if (newPath !== originalPath && isPathValid(originalPath, newPath, isMod)) {
+                            break;
+                        }
+                    }
+
+                    attempts++;
+                    if (attempts > MAX_ATTEMPTS) {
+                        //console.log(`Aborted attempt to find a new path for key ${key} after ${attempts} tries.`);
+                        break;
+                    }
+                } while (true);
+
+                if (attempts <= MAX_ATTEMPTS) {
+                    db[key]._props.Prefab.path = newPath;
+                }
+
+                processedCount++;
+                if (processedCount % PROCESS_COUNT_INTERVAL === 0) {
+                    console.log(`Processed ${processedCount}/${keys.length} entries.`);
+                }
+            });
+            db[Mod.NIGHT_VISION_SAVE_KEY] = JSON.parse(nightvisionsave);
+
+        }
+        function hasSlot(item: any, slotName: string): boolean {
+            if (!item._props || !item._props.Slots) {
+                return false;
+            }
+            return item._props.Slots.some((slot: any) => slot._name === slotName);
+        }
+        function isPathValid(originalPath: string, newPath: string, isMod: boolean): boolean {
+            const originalDirs = originalPath.split('/').slice(0, -1);
+            const newDirs = newPath.split('/').slice(0, -1);
+            if (ALLOW_MOD_RANDOMIZATION) {
+                return (originalDirs.slice(0, -DIFFERENT_FOLDERS_ALLOW - 1).join('/') === newDirs.slice(0, -DIFFERENT_FOLDERS_ALLOW - 1).join('/'));
+            }
+            else {
+                return isMod ? (originalDirs.join('/') === newDirs.join('/'))
+                    : (originalDirs.slice(0, -DIFFERENT_FOLDERS_ALLOW - 1).join('/') === newDirs.slice(0, -DIFFERENT_FOLDERS_ALLOW - 1).join('/'));
+            }
+        }
+
+
+
+        function updateSlotFilters(weapons) {
+            const excludedId = EXCLUDED_ID; // ID to be excluded from filters
+
+            Object.values(weapons).forEach(weapon => {
+                if (!weapon || !weapon._props || !weapon._props.Slots) {
+                    return; // Skip if weapon or its properties are null
+                }
+
+                weapon._props.Slots.forEach(slot => {
+                    if (!slot._props || !slot._props.filters) {
+                        return; // Skip if slot properties or filters are null
+                    }
+
+                    // Get the first Filter array
+                    const filterIds = slot._props.filters[0]?.Filter;
+
+                    if (filterIds && filterIds.length > 0) {
+                        // Collect the _parent IDs and paths corresponding to these filter IDs
+                        const parentIds = [];
+                        const paths = [];
+
+
+                        filterIds.forEach(filterId => {
+                            const weaponInfo = weapons[filterId];
+                            if (weaponInfo) {
+                                if (weaponInfo._parent && weaponInfo._parent !== excludedId) {
+                                    parentIds.push(weaponInfo._parent);
+                                }
+                                if (weaponInfo._props && weaponInfo._props.path && weaponInfo._props.path !== "") {
+                                    paths.push(weaponInfo._props.path.split('/').slice(0, -1).join('/')); // Extract folder structure
+                                }
+                            }
+                        });
+                        const updatedFilterIds = [];
+                        if (ALLOW_EVERYTHING_WITH_EVERYTHING) {
+                            Object.entries(weapons).forEach(([id, weaponInfo]) => {
+                                if (!weaponInfo._props) return;
+                                updatedFilterIds.push(id);
+                            });
+                        }
+                        else {
+
+                            Object.entries(weapons).forEach(([id, weaponInfo]) => {
+                                if (!weaponInfo._props) return;
+
+                                const weaponPath = weaponInfo._props.path ? weaponInfo._props.path.split('/').slice(0, -1).join('/') : "";
+                                const matchesParent = weaponInfo._parent && parentIds.includes(weaponInfo._parent);
+                                const matchesPath = weaponPath && paths.some(path => path === weaponPath);
+
+                                if (matchesParent || matchesPath) {
+                                    updatedFilterIds.push(id);
+                                }
+                            });
+                        }
+                        // Find all IDs in weapons that have the same _parent IDs or folder structure in path
+
+
+                        // Update the Filter field of the slot
+                        slot._props.filters[0].Filter = updatedFilterIds;
+                    }
+                });
+            });
+        }
+        exchangePrefabPath(db);
+        updateSlotFilters(db);
+
+
+    type FieldConfig = {
+        isFloat: boolean;
+        canBeNegative: boolean;
+        maxMultiplier: number;
+        minValue?: number;
+        maxValue?: number;
+    };
+    function randomizeFields(db: any, fieldConfigs: { [fieldName: string]: FieldConfig }): void {
+        const keys = Object.keys(db);
+
+        keys.forEach(key => {
+            const item = db[key];
+            if (!item._props || item._id == EXCLUDED_ID) {
+                return; // Skip if no _props
+            }
+
+            // Randomize standard fields
+            Object.entries(fieldConfigs).forEach(([fieldName, config]) => {
+                if (typeof item._props[fieldName] === 'number') {
+                    item._props[fieldName] = randomizeValue(item._props[fieldName], config);
+                }
+            });
+
+            // Special handling for Cartridges
+            if (item._props.Cartridges) {
+                item._props.Cartridges.forEach((cartridge: any) => {
+                    if (cartridge._max_count) {
+                        cartridge._max_count = randomizeCartridgeCount(cartridge._max_count);
+                    }
+                });
+            }
+        });
     }
-  }
+
+    function randomizeCartridgeCount(originalCount: number): number {
+        const multiplier = 1 + Math.floor(rng.random() * CARTRIDGE_MULTIPLIER_MAX); // Multiplier from 1 to 30
+        let randomizedCount = originalCount * multiplier;
+        return Math.max(1, randomizedCount); // Ensure the count is at least 1
+    }
+
+    // Existing randomizeValue function and fieldConfigurations
+
+
+    function randomizeValue(originalValue: number, config: FieldConfig): number {
+        const range = config.maxMultiplier - VALUE_RANGE_MIN;
+        const balancedMultiplier = VALUE_RANGE_MIN + rng.random() * range;
+        let randomizedValue = originalValue * balancedMultiplier;
+
+        // Enforce minimum and maximum limits
+        if (config.minValue !== undefined) {
+            randomizedValue = Math.max(randomizedValue, config.minValue);
+        }
+        if (config.maxValue !== undefined) {
+            randomizedValue = Math.min(randomizedValue, config.maxValue);
+        }
+
+        if (config.isFloat) {
+            randomizedValue = parseFloat(randomizedValue.toFixed(2));
+        } else {
+            randomizedValue = Math.round(randomizedValue);
+        }
+
+        if (!config.canBeNegative && randomizedValue < 0) {
+            randomizedValue = Math.abs(randomizedValue);
+        }
+
+        return randomizedValue;
+    }
+
+    // Example usage:
+
+
+    randomizeFields(db, fieldConfigurations);
+
+
+
+    function deleteFolderInAppData() {
+        const userProfile = process.env.USERPROFILE;
+
+        if (!userProfile) {
+            console.error('User profile path not found.');
+            return;
+        }
+
+        const folderPath = path.join(userProfile, Mod.FOLDER_RELATIVE_PATH);
+
+        try {
+            if (fs.existsSync(folderPath)) {
+                fs.rmSync(folderPath, { recursive: true, force: true });
+                console.log(`Deleted folder: ${folderPath} - This is safe, it just removed the cached pictures for the inventory. They get quickly regenerated when looking in the inventory.`);
+            } else {
+                console.log(`Folder not found: ${folderPath}`);
+            }
+        } catch (err) {
+            console.error(`Error deleting folder: ${err}`);
+        }
+    }
+    deleteFolderInAppData();
+    // Example usage
+    // Provide the full path to the folder you want to delete
+    //deleteFolder(pathToDelete);
+
+
+    }
 }
 
-module.exports = { mod: new Mod() }
+module.exports = { mod: new Mod() };

@@ -1,10 +1,10 @@
 {
     "name": "Nyns Randomizer",
-    "version": "0.0.4",
+    "version": "0.1.0",
     "main": "src/mod.js",
     "license": "CC BY-NC",
     "author": "Nyinah",
-    "akiVersion": "3.4.1",
+    "akiVersion": "3.7.6",
     "scripts": {
         "setup": "npm i",
         "build": "node ./packageBuild.ts"
